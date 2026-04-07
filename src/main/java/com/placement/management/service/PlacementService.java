@@ -1,106 +1,77 @@
 package com.placement.management.service;
 
 import com.placement.management.entity.Admin;
-import com.placement.management.entity.Certificate;
 import com.placement.management.entity.Placement;
 import com.placement.management.entity.User;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import com.placement.management.repository.AdminRepository;
+import com.placement.management.repository.PlacementRepository;
+import com.placement.management.repository.UserRepository;
 import java.util.List;
-import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
+@Service
 public class PlacementService {
-    private final Map<Integer, User> users = new LinkedHashMap<>();
-    private final Map<Integer, Admin> admins = new LinkedHashMap<>();
-    private final Map<Integer, Placement> placements = new LinkedHashMap<>();
-    private final List<Certificate> certificates = new ArrayList<>();
 
-    public void addUser(int userId, String username, long contactNo, String stream) {
-        if (users.containsKey(userId)) {
-            System.out.println("User id already exists.");
-            return;
-        }
-        users.put(userId, new User(userId, username, contactNo, stream));
-        System.out.println("User created successfully.");
+    private final PlacementRepository placementRepository;
+    private final UserRepository userRepository;
+    private final AdminRepository adminRepository;
+
+    @Autowired
+    public PlacementService(PlacementRepository placementRepository,
+                            UserRepository userRepository,
+                            AdminRepository adminRepository) {
+        this.placementRepository = placementRepository;
+        this.userRepository = userRepository;
+        this.adminRepository = adminRepository;
     }
 
-    public void addAdmin(int adminId, String username, long contactNo, String role) {
-        if (admins.containsKey(adminId)) {
-            System.out.println("Admin id already exists.");
-            return;
-        }
-        admins.put(adminId, new Admin(adminId, username, contactNo, role));
-        System.out.println("Admin created successfully.");
+    public Placement createPlacement(Placement placement) {
+        placement.setUser(resolveUser(placement.getUser()));
+        placement.setAdmin(resolveAdmin(placement.getAdmin()));
+        return placementRepository.save(placement);
     }
 
-    public void addPlacement(int placementId, int userId, int adminId, String companyName, String status) {
-        if (placements.containsKey(placementId)) {
-            System.out.println("Placement id already exists.");
-            return;
-        }
-        User user = users.get(userId);
-        if (user == null) {
-            System.out.println("User not found.");
-            return;
-        }
-        Admin admin = admins.get(adminId);
-        if (admin == null) {
-            System.out.println("Admin not found.");
-            return;
-        }
-        placements.put(placementId, new Placement(placementId, user, admin, companyName, status));
-        System.out.println("Placement added successfully.");
+    public List<Placement> getAllPlacements() {
+        return placementRepository.findAll();
     }
 
-    public void addCertificate(int certificateId, int userId, String title, String issuer) {
-        User user = users.get(userId);
-        if (user == null) {
-            System.out.println("User not found.");
-            return;
-        }
-        for (Certificate certificate : certificates) {
-            if (certificate.getCertificateId() == certificateId) {
-                System.out.println("Certificate id already exists.");
-                return;
-            }
-        }
-        certificates.add(new Certificate(certificateId, title, issuer, user));
-        System.out.println("Certificate added successfully.");
+    public Placement getPlacementById(Long placementId) {
+        return placementRepository.findById(placementId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Placement not found"));
     }
 
-    public void printPlacementsByUser(int userId) {
-        boolean found = false;
-        for (Placement placement : placements.values()) {
-            if (placement.getUser().getUserId() == userId) {
-                System.out.println(placement);
-                found = true;
-            }
-        }
-        if (!found) {
-            System.out.println("No placements found for user.");
-        }
+    public Placement updatePlacement(Long placementId, Placement updatedPlacement) {
+        Placement existingPlacement = getPlacementById(placementId);
+        existingPlacement.setCompanyName(updatedPlacement.getCompanyName());
+        existingPlacement.setStatus(updatedPlacement.getStatus());
+        existingPlacement.setUser(resolveUser(updatedPlacement.getUser()));
+        existingPlacement.setAdmin(resolveAdmin(updatedPlacement.getAdmin()));
+        return placementRepository.save(existingPlacement);
     }
 
-    public void printCertificatesByUser(int userId) {
-        boolean found = false;
-        for (Certificate certificate : certificates) {
-            if (certificate.getUser().getUserId() == userId) {
-                System.out.println(certificate);
-                found = true;
-            }
+    public void deletePlacement(Long placementId) {
+        if (!placementRepository.existsById(placementId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Placement not found");
         }
-        if (!found) {
-            System.out.println("No certificates found for user.");
-        }
+        placementRepository.deleteById(placementId);
     }
 
-    public void printAllPlacements() {
-        if (placements.isEmpty()) {
-            System.out.println("No placements available.");
-            return;
+    private User resolveUser(User user) {
+        if (user == null || user.getUserId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User id is required for placement");
         }
-        for (Placement placement : placements.values()) {
-            System.out.println(placement);
+        return userRepository.findById(user.getUserId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+    }
+
+    private Admin resolveAdmin(Admin admin) {
+        if (admin == null || admin.getAdminId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Admin id is required for placement");
         }
+        return adminRepository.findById(admin.getAdminId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin not found"));
     }
 }
